@@ -183,7 +183,6 @@ class OcppConnector(Connector, Thread):
             pass
 
         charge_point_id = connection.request.path.strip('/')
-        self._log.warning('>>>>path: %s, cpid: %s', connection.request.path, charge_point_id)
 
         # check if charge point can be connected
         (is_valid, cp_config) = await self._is_charge_point_valid(charge_point_id, host=cp_host, port=cp_port)
@@ -203,16 +202,13 @@ class OcppConnector(Connector, Thread):
 
     async def _is_charge_point_valid(self, charge_point_id, **kwargs):
         for cp_config in self._charge_points_config:
-            if re.match(cp_config['idRegexpPattern'], charge_point_id):
-                host = cp_config.get('host')
-                port = cp_config.get('port')
-                if host or port:
-                    if not re.match(host, kwargs.get('host')) or not re.match(port, kwargs.get('port')):
-                        return False, None
+            host = cp_config.get('host')
+            port = cp_config.get('port')
+            if host or port:
+                if not re.match(host, kwargs.get('host')) or not re.match(port, kwargs.get('port')):
+                    return False, None
 
-                return True, cp_config
-
-        return False, None
+            return True, cp_config
 
     def close(self):
         self.__stopped = True

@@ -18,6 +18,7 @@ from ocpp.routing import on
 from ocpp.v16.enums import Action, RegistrationStatus, DataTransferStatus
 from ocpp.v16 import call_result
 from datetime import datetime
+from random import randint
 
 from thingsboard_gateway.tb_utility.tb_loader import TBModuleLoader
 
@@ -86,7 +87,7 @@ class ChargePoint(CP):
         if self.authorized:
             return call_result.Authorize(id_tag_info={'status': 'Accepted'})
 
-        return call_result.Authorize(id_tag_info={'status': 'Not authorized'})
+        return call_result.Authorize(id_tag_info={'status': 'Blocked'})
 
     @on(Action.Heartbeat)
     def on_heartbeat(self):
@@ -138,7 +139,10 @@ class ChargePoint(CP):
         self._callback((self._uplink_converter,
                         {'deviceName': self.name, 'deviceType': self.type, 'messageType': Action.StartTransaction,
                          'profile': self._profile}, kwargs))
-        return call_result.StartTransaction()
+        return call_result.StartTransaction(
+            transaction_id=randint(1, 10000),
+            id_tag_info={'status':'Accepted'}
+        )
 
     @on(Action.StopTransaction)
     def on_stop_transaction(self, **kwargs):
