@@ -120,36 +120,36 @@ class OcppConnector(Connector, Thread):
     async def start_server(self):
         host = self._central_system_config.get('host', '0.0.0.0')
         port = self._central_system_config.get('port', 9000)
-        self._server = await websockets.serve(self.on_connect, host, port, subprotocols=['ocpp1.6'],
+        self._server = await websockets.serve(handler=self.on_connect, host=host, port=port, subprotocols=['ocpp1.6'],
                                               ssl=self._ssl_context)
         self.__connected = True
         self._log.info('Central System is running on %s:%d', host, port)
 
         await self._server.wait_closed()
 
-    def _auth(self, websocket):
+    def _auth(self, connection: websockets.ServerConnection):
         for sec in self._central_system_config['security']:
-            if sec['type'].lower() == 'token' and websocket.request_headers['authorization'] in sec['tokens']:
-                self._log.debug('Got Authorization: %s', websocket.request_headers['authorization'])
+            if sec['type'].lower() == 'token' and connection.request.headers['authorization'] in sec['tokens']:
+                self._log.debug('Got Authorization: %s', connection.request.headers['authorization'])
                 return
             elif sec['type'].lower() == 'basic':
                 for cred in sec['credentials']:
                     token = 'Basic {0}'.format(
                         base64.b64encode(bytes(cred['username'] + ':' + cred['password'], 'utf-8')).decode('ascii'))
-                    if websocket.request_headers['authorization'] == token:
-                        self._log.debug('Got Authorization: %s', websocket.request_headers['authorization'])
+                    if connection.request.headers['authorization'] == token:
+                        self._log.debug('Got Authorization: %s', connection.request.headers['authorization'])
                         return
 
         raise NotAuthorized('Charge Point not authorized')
 
-    async def on_connect(self, websocket, path):
+    async def on_connect(self, connection: websockets.ServerConnection):
         """ For every new charge point that connects, create a ChargePoint instance
         and start listening for messages.
 
         """
         requested_protocols = None
         try:
-            requested_protocols = websocket.request_headers[
+            requested_protocols = connection.request.headers[
                 'Sec-WebSocket-Protocol']
         except KeyError:
             self._log.info("Client hasn't requested any Subprotocol. "
@@ -158,37 +158,38 @@ class OcppConnector(Connector, Thread):
         # Authorize Charge Point before accept connection
         if self._central_system_config.get('security'):
             try:
-                self._auth(websocket)
+                self._auth(connection)
             except NotAuthorized as e:
                 self._log.error(e)
-                return await websocket.close()
+                return await connection.close()
 
-        if websocket.subprotocol:
-            self._log.info("Protocols Matched: %s", websocket.subprotocol)
+        if connection.subprotocol:
+            self._log.info("Protocols Matched: %s", connection.subprotocol)
         else:
             # In the websockets lib if no subprotocols are supported by the
             # client and the server, it proceeds without a subprotocol,
             # so we have to manually close the connection.
             self._log.warning('Protocols Mismatched | Expected Subprotocols: %s,'
                               ' but client supports  %s | Closing connection',
-                              websocket.available_subprotocols,
+                              connection.available_subprotocols,
                               requested_protocols)
-            return await websocket.close()
+            return await connection.close()
 
         cp_host = None
         cp_port = None
         try:
-            (cp_host, cp_port) = websocket.remote_address
+            (cp_host, cp_port) = connection.remote_address
         except ValueError:
             pass
 
-        charge_point_id = path.strip('/')
+        charge_point_id = connection.request.path.strip('/')
+        self._log.warning('>>>>path: %s, cpid: %s', connection.request.path, charge_point_id)
 
         # check if charge point can be connected
         (is_valid, cp_config) = await self._is_charge_point_valid(charge_point_id, host=cp_host, port=cp_port)
         if is_valid:
             uplink_converter_name = cp_config.get('extension', self._default_converters['uplink'])
-            cp = ChargePoint(charge_point_id, websocket, {**cp_config, 'uplink_converter_name': uplink_converter_name},
+            cp = ChargePoint(charge_point_id, connection, {**cp_config, 'uplink_converter_name': uplink_converter_name},
                              OcppConnector._callback, self._converter_log)
             cp.authorized = True
 

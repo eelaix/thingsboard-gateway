@@ -75,7 +75,7 @@ class ChargePoint(CP):
                          'profile': self._profile},
                         {'Vendor': charge_point_vendor, 'Model': charge_point_model, **kwargs}))
 
-        return call_result.BootNotificationPayload(
+        return call_result.BootNotification(
             current_time=datetime.utcnow().isoformat(),
             interval=10,
             status=RegistrationStatus.accepted
@@ -84,13 +84,13 @@ class ChargePoint(CP):
     @on(Action.Authorize)
     def on_authorize(self, id_tag: str, **kwargs):
         if self.authorized:
-            return call_result.AuthorizePayload(id_tag_info={'status': 'Accepted'})
+            return call_result.Authorize(id_tag_info={'status': 'Accepted'})
 
-        return call_result.AuthorizePayload(id_tag_info={'status': 'Not authorized'})
+        return call_result.Authorize(id_tag_info={'status': 'Not authorized'})
 
     @on(Action.Heartbeat)
     def on_heartbeat(self):
-        return call_result.HeartbeatPayload(
+        return call_result.Heartbeat(
             current_time=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S') + "Z"
         )
 
@@ -99,7 +99,7 @@ class ChargePoint(CP):
         self._callback((self._uplink_converter,
                         {'deviceName': self.name, 'deviceType': self.type, 'messageType': Action.MeterValues,
                          'profile': self._profile}, kwargs))
-        return call_result.MeterValuesPayload()
+        return call_result.MeterValues()
 
     @on(Action.DataTransfer)
     def on_data_transfer(self, **kwargs):
@@ -112,4 +112,58 @@ class ChargePoint(CP):
         self._callback((self._uplink_converter,
                         {'deviceName': self.name, 'deviceType': self.type, 'messageType': Action.DataTransfer,
                          'profile': self._profile}, kwargs))
-        return call_result.DataTransferPayload(status=DataTransferStatus.accepted)
+        return call_result.DataTransfer(status=DataTransferStatus.accepted)
+
+    @on(Action.StatusNotification)
+    def on_status_notification(self, **kwargs):
+        for (key, value) in kwargs.items():
+            try:
+                kwargs[key] = simplejson.loads(value)
+            except (TypeError, ValueError):
+                continue
+
+        self._callback((self._uplink_converter,
+                        {'deviceName': self.name, 'deviceType': self.type, 'messageType': Action.StatusNotification,
+                         'profile': self._profile}, kwargs))
+        return call_result.StatusNotification()
+
+    @on(Action.StartTransaction)
+    def on_start_transaction(self, **kwargs):
+        for (key, value) in kwargs.items():
+            try:
+                kwargs[key] = simplejson.loads(value)
+            except (TypeError, ValueError):
+                continue
+
+        self._callback((self._uplink_converter,
+                        {'deviceName': self.name, 'deviceType': self.type, 'messageType': Action.StartTransaction,
+                         'profile': self._profile}, kwargs))
+        return call_result.StartTransaction()
+
+    @on(Action.StopTransaction)
+    def on_stop_transaction(self, **kwargs):
+        for (key, value) in kwargs.items():
+            try:
+                kwargs[key] = simplejson.loads(value)
+            except (TypeError, ValueError):
+                continue
+
+        self._callback((self._uplink_converter,
+                        {'deviceName': self.name, 'deviceType': self.type, 'messageType': Action.StopTransaction,
+                         'profile': self._profile}, kwargs))
+        return call_result.StopTransaction()
+
+    @on(Action.DiagnosticsStatusNotification)
+    def on_diagnostics_status_otification(self, **kwargs):
+        for (key, value) in kwargs.items():
+            try:
+                kwargs[key] = simplejson.loads(value)
+            except (TypeError, ValueError):
+                continue
+
+        self._callback((self._uplink_converter,
+                        {'deviceName': self.name, 'deviceType': self.type, 'messageType': Action.DiagnosticsStatusNotification,
+                         'profile': self._profile}, kwargs))
+        return call_result.DiagnosticsStatusNotification()
+
+
