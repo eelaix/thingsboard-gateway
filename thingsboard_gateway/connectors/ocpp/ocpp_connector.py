@@ -34,14 +34,14 @@ from thingsboard_gateway.tb_utility.tb_logger import init_logger
 try:
     import ocpp
 except ImportError:
-    print('OCPP library not found - installing...')
+    print("OCPP library not found - installing...")
     TBUtility.install_package("ocpp")
     import ocpp
 
 try:
     import websockets
 except ImportError:
-    print('websockets library not found - installing...')
+    print("websockets library not found - installing...")
     TBUtility.install_package("websockets")
     import websockets
 
@@ -67,7 +67,7 @@ class OcppConnector(Connector, Thread):
         self.statistics = {'MessagesReceived': 0,
                            'MessagesSent': 0}
         self._gateway = gateway
-        self.name = self._config.get("name", 'OCPP Connector ' + ''.join(choice(ascii_lowercase) for _ in range(5)))
+        self.name = self._config.get('name', 'OCPP Connector ' + ''.join(choice(ascii_lowercase) for _ in range(5)))
         self._log = init_logger(self._gateway, self.name, self._config.get('logLevel', 'INFO'),
                                 enable_remote_logging=self._config.get('enableRemoteLogging', False),
                                 is_connector_logger=True)
@@ -90,7 +90,7 @@ class OcppConnector(Connector, Thread):
                 self._ssl_context.load_cert_chain(pem_file, key_file, password=password)
         except Exception as e:
             self._log.exception(e)
-            self._log.warning('TLS connection not set!')
+            self._log.warning("TLS connection not set!")
             self._ssl_context = None
 
         self._data_convert_thread = Thread(name='Convert Data Thread', daemon=True, target=self._process_data)
@@ -123,24 +123,28 @@ class OcppConnector(Connector, Thread):
         self._server = await websockets.serve(handler=self.on_connect, host=host, port=port, subprotocols=['ocpp1.6'],
                                               ssl=self._ssl_context)
         self.__connected = True
-        self._log.info('Central System is running on %s:%d', host, port)
+        self._log.info("Central System is running on %s:%d", host, port)
 
         await self._server.wait_closed()
 
-    def _auth(self, connection: websockets.ServerConnection):
-        for sec in self._central_system_config['security']:
-            if sec['type'].lower() == 'token' and connection.request.headers['authorization'] in sec['tokens']:
-                self._log.debug('Got Authorization: %s', connection.request.headers['authorization'])
+    def _auth(self, securities, authorization):
+        for sec in securities:
+            self._log.warn(sec['type'])
+            if sec['type'].lower() == 'token' and authorization in sec['tokens']:
+                self._log.warn("Got Authorization: %s", authorization)
                 return
             elif sec['type'].lower() == 'basic':
                 for cred in sec['credentials']:
+                    self._log.warn(cred['username'])
+                    self._log.warn(cred['password'])
                     token = 'Basic {0}'.format(
                         base64.b64encode(bytes(cred['username'] + ':' + cred['password'], 'utf-8')).decode('ascii'))
-                    if connection.request.headers['authorization'] == token:
-                        self._log.debug('Got Authorization: %s', connection.request.headers['authorization'])
+                    self._log.warn(token)
+                    if authorization == token:
+                        self._log.warn("Got Authorization: %s", authorization)
                         return
-
         raise NotAuthorized('Charge Point not authorized')
+            
 
     async def on_connect(self, connection: websockets.ServerConnection):
         """ For every new charge point that connects, create a ChargePoint instance
@@ -156,12 +160,32 @@ class OcppConnector(Connector, Thread):
                            "Closing Connection")
 
         # Authorize Charge Point before accept connection
-        if self._central_system_config.get('security'):
-            try:
-                self._auth(connection)
-            except NotAuthorized as e:
-                self._log.error(e)
-                return await connection.close()
+# User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)
+# Accept: */*
+# Accept-Encoding: gzip, deflate
+# Accept-Language: zh-CN,zh-Hans;q=0.9
+# Cache-Control: no-cache
+# Connection: Upgrade
+# Origin: tauri://localhost
+# Pragma: no-cache
+# Sec-Websocket-Extensions: permessage-deflate
+# Sec-Websocket-Key: Txsja+T2Eichyaj0HOpFaQ==
+# Sec-Websocket-Protocol: ocpp1.6, ocpp1.5
+# Sec-Websocket-Version: 13
+# Upgrade: websocket
+        self._log.error(str(connection.request.headers))
+        authorization = connection.request.headers.get('authorization')
+        securities = self._central_system_config.get('security')
+        if authorization:
+            if securities:
+                try:
+                    self._auth(securities, authorization)
+                except NotAuthorized as e:
+                    self._log.error(e)
+                    return await connection.close()
+        else:
+            return await connection.close()
+
 
         if connection.subprotocol:
             self._log.info("Protocols Matched: %s", connection.subprotocol)
@@ -169,8 +193,8 @@ class OcppConnector(Connector, Thread):
             # In the websockets lib if no subprotocols are supported by the
             # client and the server, it proceeds without a subprotocol,
             # so we have to manually close the connection.
-            self._log.warning('Protocols Mismatched | Expected Subprotocols: %s,'
-                              ' but client supports  %s | Closing connection',
+            self._log.warning("Protocols Mismatched | Expected Subprotocols: %s,"
+                              " but client supports  %s | Closing connection",
                               connection.available_subprotocols,
                               requested_protocols)
             return await connection.close()
@@ -192,7 +216,7 @@ class OcppConnector(Connector, Thread):
                              OcppConnector._callback, self._converter_log)
             cp.authorized = True
 
-            self._log.info('Connected Charge Point with id: %s', charge_point_id)
+            self._log.info("Connected Charge Point with id: %s", charge_point_id)
             self._connected_charge_points.append(cp)
 
             try:
@@ -223,7 +247,7 @@ class OcppConnector(Connector, Thread):
 
         self.__loop.stop()
 
-        self._log.info('%s has been stopped.', self.get_name())
+        self._log.info("%s has been stopped.", self.get_name())
         self._log.stop()
 
     def get_id(self):
@@ -252,7 +276,7 @@ class OcppConnector(Connector, Thread):
                 StatisticsService.count_connector_bytes(self.name, data,
                                                         stat_parameter_name='connectorBytesReceived')
 
-                self._log.debug('Data from Charge Point: %s', data)
+                self._log.debug("Data from Charge Point: %s", data)
                 converted_data: ConvertedData = converter.convert(config, data)
                 if (converted_data and
                         (converted_data.attributes_datapoints_count > 0 or
@@ -277,21 +301,21 @@ class OcppConnector(Connector, Thread):
 
     @CollectAllReceivedBytesStatistics(start_stat_type='allReceivedBytesFromTB')
     def on_attributes_update(self, content):
-        self._log.debug('Got attribute update: %s', content)
+        self._log.debug("Got attribute update: %s", content)
 
         try:
             charge_point = tuple(filter(lambda cp: cp.name == content['device'], self._connected_charge_points))[0]
         except IndexError:
-            self._log.error('Charge Point with name %s not found!', content['device'])
+            self._log.error("Charge Point with name %s not found!", content['device'])
             return
 
         try:
             for attribute_update_config in charge_point.config.get('attributeUpdates', []):
                 for (attr_key, attr_value) in content['data'].items():
                     if attr_key == attribute_update_config['attributeOnThingsBoard']:
-                        data = attribute_update_config["valueExpression"] \
-                            .replace("${attributeKey}", str(attr_key)) \
-                            .replace("${attributeValue}", str(attr_value))
+                        data = attribute_update_config['valueExpression'] \
+                            .replace('${attributeKey}', str(attr_key)) \
+                            .replace('${attributeValue}', str(attr_value))
                         request = call.DataTransferPayload('1', data=data)
 
                         task = self.__loop.create_task(self._send_request(charge_point, request))
@@ -304,64 +328,157 @@ class OcppConnector(Connector, Thread):
 
     @CollectAllReceivedBytesStatistics(start_stat_type='allReceivedBytesFromTB')
     def server_side_rpc_handler(self, content):
-        self._log.debug('Got RPC: %s', content)
+        self._log.info("Got RPC: %s", content)
 
         try:
             charge_point = tuple(filter(lambda cp: cp.name == content['device'], self._connected_charge_points))[0]
         except IndexError:
-            self._log.error('Charge Point with name %s not found!', content['device'])
+            self._log.error("Charge Point with name %s not found!", content['device'])
             return
 
-        # check if RPC method is reserved get/set
-        self.__check_and_process_reserved_rpc(charge_point, content)
-
         try:
-            for rpc in charge_point.config.get('serverSideRpc', []):
-                if rpc['methodRPC'] == content['data']['method']:
-                    self.__process_rpc(charge_point, content, rpc)
+            if 'evstartcharge' == content['data']['method']:
+                self.__ev_start_charge(charge_point, content)
+            if 'evstopcharge' == content['data']['method']:
+                self.__ev_stop_charge(charge_point, content)
+            if 'evunlockgun' == content['data']['method']:
+                self.__ev_unlock_gun(charge_point, content)
+            if 'evdatarequest' == content['data']['method']:
+                self.__ev_data_request(charge_point, content)
+            if 'evreset' == content['data']['method']:
+                self.__ev_reset(charge_point, content)
         except Exception as e:
             self._log.exception(e)
 
-    def __process_rpc(self, charge_point, content, rpc):
-        data_to_send_tags = TBUtility.get_values(rpc.get('valueExpression'), content['data'],
-                                                 'params',
-                                                 get_tag=True)
-        data_to_send_values = TBUtility.get_values(rpc.get('valueExpression'), content['data'],
-                                                   'params',
-                                                   expression_instead_none=True)
+        # check if RPC method is reserved get/set
+        # self.__check_and_process_reserved_rpc(charge_point, content)
 
-        data_to_send = rpc.get('valueExpression')
-        for (tag, value) in zip(data_to_send_tags, data_to_send_values):
-            data_to_send = data_to_send.replace('${' + tag + '}', dumps(value))
+        # try:
+        #     for rpc in charge_point.config.get('serverSideRpc', []):
+        #         if rpc['methodRPC'] == content['data']['method']:
+        #             self.__process_rpc(charge_point, content, rpc)
+        # except Exception as e:
+        #     self._log.exception(e)
 
-        request = call.DataTransferPayload('1', data=data_to_send)
+    # def __process_rpc(self, charge_point, content, rpc):
+    #     data_to_send_tags = TBUtility.get_values(rpc.get('valueExpression'), content['data'],
+    #                                              'params',
+    #                                              get_tag=True)
+    #     data_to_send_values = TBUtility.get_values(rpc.get('valueExpression'), content['data'],
+    #                                                'params',
+    #                                                expression_instead_none=True)
 
-        task = self.__loop.create_task(
-            self._send_request(charge_point, request))
-        while not task.done():
-            sleep(.2)
+    #     data_to_send = rpc.get('valueExpression')
+    #     for (tag, value) in zip(data_to_send_tags, data_to_send_values):
+    #         data_to_send = data_to_send.replace('${' + tag + '}', dumps(value))
 
-        if rpc.get('withResponse', True):
-            self._gateway.send_rpc_reply(content["device"], content["data"]["id"], {
-                                         'result': str(task.result())})
+    #     request = call.DataTransferPayload('1', data=data_to_send)
 
-            return
+    #     task = self.__loop.create_task(
+    #         self._send_request(charge_point, request))
+    #     while not task.done():
+    #         sleep(.2)
 
-    def __check_and_process_reserved_rpc(self, charge_point, content):
+    #     if rpc.get('withResponse', True):
+    #         self._gateway.send_rpc_reply(content["device"], content["data"]["id"], {
+    #                                      'result': str(task.result())})
+
+    #         return
+
+    # def __check_and_process_reserved_rpc(self, charge_point, content):
+    #     params = {}
+    #     for param in content['data']['params'].split(';'):
+    #         try:
+    #             (key, value) = param.split('=')
+    #         except ValueError:
+    #             continue
+
+    #         if key and value:
+    #             params[key] = value
+
+    #     if content['data']['method'] == 'set':
+    #         params['valueExpression'] = params.pop('value', None)
+
+    #     self.__process_rpc(charge_point, content, params)
+
+    def get_config(self):
+        return {'CS': self._central_system_config, 'CP': self._charge_points_config}
+
+    def __ev_start_charge(self, charge_point, content):
         params = {}
         for param in content['data']['params'].split(';'):
             try:
                 (key, value) = param.split('=')
             except ValueError:
                 continue
-
             if key and value:
                 params[key] = value
+        request = call.RemoteStartTransaction(id_tag='1', connector_id=1)
 
-        if content['data']['method'] == 'set':
-            params['valueExpression'] = params.pop('value', None)
+        task = self.__loop.create_task(
+            self._send_request(charge_point, request))
+        while not task.done():
+            sleep(.2)
+        self._gateway.send_rpc_reply(content['device'], content['data']['id'], {'result': str(task.result())})
+        return
 
-        self.__process_rpc(charge_point, content, params)
+    def __ev_stop_charge(self, charge_point, content):
+        params = {}
+        for param in content['data']['params'].split(';'):
+            try:
+                (key, value) = param.split('=')
+            except ValueError:
+                continue
+            if key and value:
+                params[key] = value
+        request = call.RemoteStopTransaction(transaction_id=1)
 
-    def get_config(self):
-        return {'CS': self._central_system_config, 'CP': self._charge_points_config}
+        task = self.__loop.create_task(
+            self._send_request(charge_point, request))
+        while not task.done():
+            sleep(.2)
+        self._gateway.send_rpc_reply(content['device'], content['data']['id'], {'result': str(task.result())})
+        return
+
+    def __ev_reset(self, charge_point, content):
+        params = {}
+        for param in content['data']['params'].split(';'):
+            try:
+                (key, value) = param.split('=')
+            except ValueError:
+                continue
+            if key and value:
+                params[key] = value
+        request = call.Reset(type=params['type'])
+        task = self.__loop.create_task(
+            self._send_request(charge_point, request))
+        while not task.done():
+            sleep(.2)
+        self._gateway.send_rpc_reply(content['device'], content['data']['id'], {'result': str(task.result())})
+        return
+
+    def __ev_unlock_gun(self, charge_point, content):
+        params = {}
+        for param in content['data']['params'].split(';'):
+            try:
+                (key, value) = param.split('=')
+            except ValueError:
+                continue
+            if key and value:
+                params[key] = value
+        request = call.UnlockConnector(connector_id=int(params['gunid']))
+        task = self.__loop.create_task(
+            self._send_request(charge_point, request))
+        while not task.done():
+            sleep(.2)
+        self._gateway.send_rpc_reply(content['device'], content['data']['id'], {'result': str(task.result())})
+        return
+
+    def __ev_data_request(self, charge_point, content):
+        request = call.DataTransfer(vendor_id=charge_point._profile['Vendor'])
+        task = self.__loop.create_task(
+            self._send_request(charge_point, request))
+        while not task.done():
+            sleep(.2)
+        self._gateway.send_rpc_reply(content['device'], content['data']['id'], {'result': str(task.result())})
+        return

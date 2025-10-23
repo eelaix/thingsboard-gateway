@@ -92,7 +92,7 @@ class ChargePoint(CP):
     @on(Action.Heartbeat)
     def on_heartbeat(self):
         return call_result.Heartbeat(
-            current_time=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S') + "Z"
+            current_time=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S') + 'Z'
         )
 
     @on(Action.MeterValues)
@@ -117,28 +117,10 @@ class ChargePoint(CP):
 
     @on(Action.StatusNotification)
     def on_status_notification(self, **kwargs):
-        for (key, value) in kwargs.items():
-            try:
-                kwargs[key] = simplejson.loads(value)
-            except (TypeError, ValueError):
-                continue
-
-        self._callback((self._uplink_converter,
-                        {'deviceName': self.name, 'deviceType': self.type, 'messageType': Action.StatusNotification,
-                         'profile': self._profile}, kwargs))
         return call_result.StatusNotification()
 
     @on(Action.StartTransaction)
     def on_start_transaction(self, **kwargs):
-        for (key, value) in kwargs.items():
-            try:
-                kwargs[key] = simplejson.loads(value)
-            except (TypeError, ValueError):
-                continue
-
-        self._callback((self._uplink_converter,
-                        {'deviceName': self.name, 'deviceType': self.type, 'messageType': Action.StartTransaction,
-                         'profile': self._profile}, kwargs))
         return call_result.StartTransaction(
             transaction_id=randint(1, 10000),
             id_tag_info={'status':'Accepted'}
@@ -146,28 +128,10 @@ class ChargePoint(CP):
 
     @on(Action.StopTransaction)
     def on_stop_transaction(self, **kwargs):
-        for (key, value) in kwargs.items():
-            try:
-                kwargs[key] = simplejson.loads(value)
-            except (TypeError, ValueError):
-                continue
-
-        self._callback((self._uplink_converter,
-                        {'deviceName': self.name, 'deviceType': self.type, 'messageType': Action.StopTransaction,
-                         'profile': self._profile}, kwargs))
         return call_result.StopTransaction()
 
     @on(Action.DiagnosticsStatusNotification)
     def on_diagnostics_status_otification(self, **kwargs):
-        for (key, value) in kwargs.items():
-            try:
-                kwargs[key] = simplejson.loads(value)
-            except (TypeError, ValueError):
-                continue
-
-        self._callback((self._uplink_converter,
-                        {'deviceName': self.name, 'deviceType': self.type, 'messageType': Action.DiagnosticsStatusNotification,
-                         'profile': self._profile}, kwargs))
         return call_result.DiagnosticsStatusNotification()
 
 
